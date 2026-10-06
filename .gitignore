@@ -126,6 +126,9 @@ self-hosting/.env
 # vite-ssg temp files
 .vite-ssg-temp
 
+# Local scratch files (bank statements, imports) – never commit
+.temp/
+
 # Serverless directories
 .serverless/
 

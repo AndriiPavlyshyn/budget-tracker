@@ -56,11 +56,31 @@ export default async ({ mode }) => {
         }
       : undefined;
 
+  // BETTER_AUTH_URL points at this dev server, so MCP clients discover OAuth and
+  // call /mcp on this origin. Mirror the production nginx rules
+  // (self-hosting/frontend/docker-entrypoint.sh) and forward those paths to the
+  // backend – otherwise the static production mirrors in public/.well-known or
+  // the SPA fallback answer them. Inside Docker the backend is the `backend`
+  // service, set via DEV_BACKEND_PROXY_TARGET in docker/dev/docker-compose.yml.
+  const backendProxyTarget =
+    process.env.DEV_BACKEND_PROXY_TARGET || `https://localhost:${process.env.APPLICATION_PORT || 8081}`;
+  const backendProxy = { target: backendProxyTarget, changeOrigin: false, secure: false };
+  const oauthMcpProxy = Object.fromEntries(
+    [
+      '/api/',
+      '^/mcp/?$',
+      '^/(authorize|token|register)$',
+      '^/\\.well-known/oauth-authorization-server(/.*)?$',
+      '^/\\.well-known/oauth-protected-resource(/mcp)?$',
+    ].map((pattern) => [pattern, backendProxy]),
+  );
+
   const serverConfig = {
     port: process.env.PORT,
     host: process.env.HOST,
     ...(httpsConfig && { https: httpsConfig }),
     hmr: process.env.HMR_HOST ? { host: process.env.HMR_HOST } : true,
+    proxy: oauthMcpProxy,
   };
 
   // Only add Sentry plugin in production build when auth token is available

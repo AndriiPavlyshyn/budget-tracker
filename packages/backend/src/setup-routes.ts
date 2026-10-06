@@ -4,6 +4,8 @@ import { Sentry } from '@js/utils/sentry';
 import { toNodeHandler } from 'better-auth/node';
 import { Express, Request, Response } from 'express';
 import http from 'node:http';
+import https from 'node:https';
+import type { TLSSocket } from 'node:tls';
 
 import { API_PREFIX } from './config';
 import { auth, authPool } from './config/auth';
@@ -103,7 +105,10 @@ export function setupRoutes(app: Express) {
         body = Buffer.concat(chunks);
       }
 
-      const proxyReq = http.request(
+      // Dev serves HTTPS with local mkcert certs, while test and production listen on
+      // plain HTTP – call ourselves over whichever protocol this request arrived on.
+      const isTls = (req.socket as TLSSocket).encrypted === true;
+      const proxyReq = (isTls ? https : http).request(
         {
           hostname: '127.0.0.1',
           port: Number(req.app.get('port')) || 8080,
@@ -114,6 +119,8 @@ export function setupRoutes(app: Express) {
             'content-length': body.length.toString(),
             'x-register-patched': '1',
           },
+          // Loopback call to this same process; the dev cert is issued for `localhost`, not 127.0.0.1.
+          ...(isTls && { rejectUnauthorized: false }),
         },
         (proxyRes) => {
           res.writeHead(proxyRes.statusCode ?? 500, proxyRes.headers);
